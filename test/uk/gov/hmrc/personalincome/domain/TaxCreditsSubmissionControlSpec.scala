@@ -30,8 +30,8 @@ class TaxCreditsSubmissionControlSpec extends UnitSpec {
       |    ntc {
       |      submission {
       |        shutter = false
-      |        startDate = "2016-04-01T00:00:00.000Z"
-      |        endDate = "2016-07-31T23:59:59.999Z"
+      |        startDate = "2017-04-01T00:00:00.000Z"
+      |        endDate = "2017-08-05T12:00:00.000Z"
       |      }
       |    }
       |  }
@@ -50,15 +50,17 @@ class TaxCreditsSubmissionControlSpec extends UnitSpec {
       sc.shutter shouldBe false
 
       val start = sc.startDate
+      start.getYear shouldBe 2017
       start.getDayOfMonth shouldBe 1
       start.getMonthOfYear shouldBe 4
       start.getHourOfDay shouldBe 0
 
       val end = sc.endDate
-      end.getDayOfMonth shouldBe 31
-      end.getMonthOfYear shouldBe 7
-      end.getHourOfDay shouldBe 23
-      end.getSecondOfMinute shouldBe 59
+      end.getYear shouldBe 2017
+      end.getDayOfMonth shouldBe 5
+      end.getMonthOfYear shouldBe 8
+      end.getHourOfDay shouldBe 12
+      end.getSecondOfMinute shouldBe 0
     }
 
     "application initialisation" in {
@@ -69,20 +71,22 @@ class TaxCreditsSubmissionControlSpec extends UnitSpec {
       sc.shutter shouldBe false
 
       val start = sc.startDate
+      start.getYear shouldBe 2017
       start.getDayOfMonth shouldBe 1
       start.getMonthOfYear shouldBe 4
       start.getHourOfDay shouldBe 0
 
       val end = sc.endDate
-      end.getDayOfMonth shouldBe 31
-      end.getMonthOfYear shouldBe 7
-      end.getHourOfDay shouldBe 23
-      end.getSecondOfMinute shouldBe 59
+      end.getYear shouldBe 2017
+      end.getDayOfMonth shouldBe 5
+      end.getMonthOfYear shouldBe 8
+      end.getHourOfDay shouldBe 12
+      end.getSecondOfMinute shouldBe 0
     }
 
     "expose unshuttered and active submission period" in {
 
-      val withinSubmissionPeriod = new DateTime("2016-04-10T00:00:00.000Z")
+      val withinSubmissionPeriod = new DateTime("2017-04-10T00:00:00.000Z")
       val tcs = taxCreditsSubmissionControlConfig(withinSubmissionPeriod).toTaxCreditsSubmissions
       tcs.shuttered shouldBe false
       tcs.inSubmissionPeriod shouldBe true
@@ -90,7 +94,7 @@ class TaxCreditsSubmissionControlSpec extends UnitSpec {
 
     "be within active submission period for exact START date" in {
 
-      val exactStartDate = new DateTime("2016-04-01T00:00:00.000Z")
+      val exactStartDate = new DateTime("2017-04-01T00:00:00.000Z")
       val tcs = taxCreditsSubmissionControlConfig(exactStartDate).toTaxCreditsSubmissions
 
       tcs.inSubmissionPeriod shouldBe true
@@ -98,7 +102,7 @@ class TaxCreditsSubmissionControlSpec extends UnitSpec {
 
     "be within active submission period for exact END date" in {
 
-      val exactStartDate = new DateTime("2016-07-31T23:59:59.999Z")
+      val exactStartDate = new DateTime("2017-08-05T12:00:00.000Z")
       val tcs = taxCreditsSubmissionControlConfig(exactStartDate).toTaxCreditsSubmissions
 
       tcs.inSubmissionPeriod shouldBe true
@@ -114,7 +118,7 @@ class TaxCreditsSubmissionControlSpec extends UnitSpec {
 
     "be AFTER active submission period" in {
 
-      val beforeSubmissionPeriod = new DateTime("2016-08-01T00:00:00.000Z")
+      val beforeSubmissionPeriod = new DateTime("2017-08-05T12:00:01.000Z")
       val tcs = taxCreditsSubmissionControlConfig(beforeSubmissionPeriod).toTaxCreditsSubmissions
 
       tcs.inSubmissionPeriod shouldBe false
