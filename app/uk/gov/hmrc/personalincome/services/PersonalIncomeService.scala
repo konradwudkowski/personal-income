@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 HM Revenue & Customs
+ * Copyright 2017 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,18 +18,19 @@ package uk.gov.hmrc.personalincome.services
 
 import com.ning.http.util.Base64
 import play.api.Logger
-import play.api.libs.json.{JsResult, JsError, Json}
-import uk.gov.hmrc.personalincome.config.MicroserviceAuditConnector
+import play.api.libs.json.{JsError, JsResult, Json}
+import uk.gov.hmrc.personalincome.config.{AuthConnector, MicroserviceAuditConnector}
 import uk.gov.hmrc.personalincome.connectors._
 import uk.gov.hmrc.personalincome.controllers.HeaderKeys
 import uk.gov.hmrc.personalincome.domain._
-import uk.gov.hmrc.personalincome.domain.userdata.{Exclusion, Children, Child, TaxCreditSummary}
+import uk.gov.hmrc.personalincome.domain.userdata.{Child, Children, Exclusion, TaxCreditSummary}
 import uk.gov.hmrc.personalincome.utils.TaxSummaryHelper
 import uk.gov.hmrc.domain.Nino
 import uk.gov.hmrc.play.audit.http.connector.AuditConnector
 import uk.gov.hmrc.play.http.HeaderCarrier
 import uk.gov.hmrc.api.service._
 import uk.gov.hmrc.api.sandbox._
+import uk.gov.hmrc.auth.core.AuthConnector
 import uk.gov.hmrc.personalincome.domain.TcrAuthCheck
 
 import scala.concurrent.{ExecutionContext, Future}

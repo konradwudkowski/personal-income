@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 HM Revenue & Customs
+ * Copyright 2017 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,8 @@
 
 package uk.gov.hmrc.personalincome.controllers
 
-import play.api.mvc.{BodyParsers, Request}
+import play.api.mvc.{Action, BodyParsers, Request}
 import uk.gov.hmrc.personalincome.connectors.Error
-import uk.gov.hmrc.personalincome.controllers.action.{AccountAccessControlCheckOff, AccountAccessControlWithHeaderCheck}
 import play.api.libs.json.{JsError, Json}
 import uk.gov.hmrc.personalincome.domain._
 import uk.gov.hmrc.personalincome.services.{LivePersonalIncomeService, PersonalIncomeService, SandboxPersonalIncomeService}
@@ -27,6 +26,8 @@ import play.api.{Logger, mvc}
 import uk.gov.hmrc.play.http.{HeaderCarrier, NotFoundException, ServiceUnavailableException}
 import uk.gov.hmrc.play.microservice.controller.BaseController
 import uk.gov.hmrc.api.controllers._
+import uk.gov.hmrc.auth.core.{AuthConnector, AuthorisedFunctions}
+import uk.gov.hmrc.personalincome.config.AuthConnector
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -51,13 +52,12 @@ trait ErrorHandling {
   }
 }
 
-trait PersonalIncomeController extends BaseController with HeaderValidator with ErrorHandling {
+trait PersonalIncomeController extends BaseController with AuthorisedFunctions with HeaderValidator with ErrorHandling {
 
   val service: PersonalIncomeService
-  val accessControl:AccountAccessControlWithHeaderCheck
   val taxCreditsSubmissionControlConfig : TaxCreditsControl
 
-  final def getSummary(nino: Nino, year: Int, journeyId: Option[String]=None) = accessControl.validateAcceptWithAuth(acceptHeaderValidationRules, Some(nino)).async {
+  final def getSummary(nino: Nino, year: Int, journeyId: Option[String]=None) = validateAccept(acceptHeaderValidationRules).async {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(service.getSummary(nino, year).map {
@@ -66,7 +66,7 @@ trait PersonalIncomeController extends BaseController with HeaderValidator with 
       })
   }
 
-  final def getRenewalAuthentication(nino: Nino, renewalReference:RenewalReference, journeyId: Option[String]=None) = accessControl.validateAcceptWithAuth(acceptHeaderValidationRules, Some(nino)).async {
+  final def getRenewalAuthentication(nino: Nino, renewalReference:RenewalReference, journeyId: Option[String]=None) = validateAccept(acceptHeaderValidationRules).async {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(
@@ -76,14 +76,14 @@ trait PersonalIncomeController extends BaseController with HeaderValidator with 
       })
   }
 
-  final def getTaxCreditExclusion(nino: Nino, journeyId: Option[String] = None) = accessControl.validateAcceptWithAuth(acceptHeaderValidationRules, Some(nino)).async {
+  final def getTaxCreditExclusion(nino: Nino, journeyId: Option[String] = None) = validateAccept(acceptHeaderValidationRules).async {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(
         service.getTaxCreditExclusion(nino).map { res => Ok(Json.parse(s"""{"showData":${!res.excluded}}""")) })
   }
 
-  final def claimantDetails(implicit nino: Nino, journeyId: Option[String]=None) = accessControl.validateAcceptWithAuth(acceptHeaderValidationRules, Some(nino)).async {
+  final def claimantDetails(implicit nino: Nino, journeyId: Option[String]=None) = validateAccept(acceptHeaderValidationRules).async {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(validateTcrAuthHeader() {
@@ -93,7 +93,7 @@ trait PersonalIncomeController extends BaseController with HeaderValidator with 
       })
   }
 
-  final def submitRenewal(nino: Nino, journeyId: Option[String]=None) = accessControl.validateAcceptWithAuth(acceptHeaderValidationRules, Some(nino)).async(BodyParsers.parse.json) {
+  final def submitRenewal(nino: Nino, journeyId: Option[String]=None) = validateAccept(acceptHeaderValidationRules).async(BodyParsers.parse.json) {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
 
@@ -122,7 +122,7 @@ trait PersonalIncomeController extends BaseController with HeaderValidator with 
       )
   }
 
-  final def taxCreditsSummary(nino: Nino, journeyId: Option[String]=None) = accessControl.validateAcceptWithAuth(acceptHeaderValidationRules, Some(nino)).async {
+  final def taxCreditsSummary(nino: Nino, journeyId: Option[String]=None) = validateAccept(acceptHeaderValidationRules).async {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(service.getTaxCreditSummary(nino).map(as => Ok(Json.toJson(as))))
@@ -142,15 +142,16 @@ trait PersonalIncomeController extends BaseController with HeaderValidator with 
 
 object SandboxPersonalIncomeController extends PersonalIncomeController {
   override val service = SandboxPersonalIncomeService
-  override val accessControl = AccountAccessControlCheckOff
   override val taxCreditsSubmissionControlConfig: TaxCreditsControl = new TaxCreditsControl {
     override def toTaxCreditsSubmissions: TaxCreditsSubmissions = new TaxCreditsSubmissions(false, true)
     override def toSubmissionState: SubmissionState = SubmissionState(submissionState = true)
   }
+
+  override def authConnector: AuthConnector = AuthConnector
 }
 
 object LivePersonalIncomeController extends PersonalIncomeController {
   override val service = LivePersonalIncomeService
-  override val accessControl = AccountAccessControlWithHeaderCheck
   override val taxCreditsSubmissionControlConfig: TaxCreditsControl = TaxCreditsSubmissionControl
+  override def authConnector: AuthConnector = AuthConnector
 }

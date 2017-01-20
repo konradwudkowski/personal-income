@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 HM Revenue & Customs
+ * Copyright 2017 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,25 +19,23 @@ package uk.gov.hmrc.personalincome.controllers
 import java.util.UUID
 
 import com.ning.http.util.Base64
-import com.typesafe.config.Config
 import org.joda.time.DateTime
 import play.api.libs.json.{JsValue, Json}
 import play.api.test.FakeRequest
 import play.api.test.Helpers._
-import uk.gov.hmrc.personalincome.config.MicroserviceAuditConnector
+import uk.gov.hmrc.auth.core._
+import uk.gov.hmrc.domain.Nino
+import uk.gov.hmrc.personalincome.config.{AuthConnector, MicroserviceAuditConnector}
 import uk.gov.hmrc.personalincome.connectors._
-import uk.gov.hmrc.personalincome.controllers.action.{AccountAccessControl, AccountAccessControlCheckOff, AccountAccessControlWithHeaderCheck}
 import uk.gov.hmrc.personalincome.domain._
 import uk.gov.hmrc.personalincome.domain.userdata._
 import uk.gov.hmrc.personalincome.services.{LivePersonalIncomeService, PersonalIncomeService, SandboxPersonalIncomeService}
-import uk.gov.hmrc.domain.Nino
 import uk.gov.hmrc.play.audit.http.connector.AuditResult
-import uk.gov.hmrc.play.auth.microservice.connectors.ConfidenceLevel
 import uk.gov.hmrc.play.http._
 import uk.gov.hmrc.time.DateTimeUtils
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, Future}
 
 
 class TestTaiConnector(taxSummaryDetails:Option[TaxSummaryDetails]) extends TaiTestConnector {
@@ -73,19 +71,16 @@ class TestNtcConnector(response:Response, tcrAuthToken:Option[TcrAuthenticationT
   }
 }
 
-class TestAuthConnector(nino: Option[Nino], ex:Option[Exception]=None) extends AuthConnector {
+class TestAuthConnector(nino: Option[Nino], authorisationExceptionString:Option[String]=None) extends PlayAuthConnector {
+
   override val serviceUrl: String = "someUrl"
 
-  override def serviceConfidenceLevel: ConfidenceLevel = ???
+  override def http: HttpPost = ???
 
-  override def http: HttpGet = ???
-
-  override def accounts()(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Accounts] = Future(Accounts(nino, None, false, false))
-
-  override def grantAccess(taxId:Option[Nino])(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Unit] = {
-    ex match {
-      case None => Future(Unit)
-      case Some(failure) => Future.failed(failure)
+  override def authorise[A](predicate: Predicate, retrieval: Retrieval[A])(implicit hc: HeaderCarrier): Future[A] = {
+    authorisationExceptionString match {
+      case Some(_) =>  Future.failed(AuthenticateHeaderParser.parse(Map("WWW-Authenticate" -> Seq(authorisationExceptionString.get))))
+      case None => super.authorise(predicate, retrieval)
     }
   }
 }
@@ -122,19 +117,10 @@ class TestPersonalIncomeService(testTaiConnector:TestTaiConnector,
   override val auditConnector = testAuditConnector
 }
 
-class TestAccessCheck(testAuthConnector: TestAuthConnector) extends AccountAccessControl {
-  override val authConnector: AuthConnector = testAuthConnector
-}
-
-class TestAccountAccessControlWithAccept(testAccessCheck:AccountAccessControl) extends AccountAccessControlWithHeaderCheck {
-  override val accessControl: AccountAccessControl = testAccessCheck
-}
-
 class TestTaxCreditsSubmission(taxCreditsSubmissions: TaxCreditsSubmissions) extends TaxCreditsControl {
   override def toTaxCreditsSubmissions = taxCreditsSubmissions
   override def toSubmissionState = new SubmissionState(!toTaxCreditsSubmissions.shuttered && toTaxCreditsSubmissions.inSubmissionPeriod)
 }
-
 
 trait Setup {
   implicit val hc = HeaderCarrier()
@@ -242,12 +228,9 @@ trait Setup {
   val exclusionResult = Json.parse("""{"showData":true}""")
   val taxCreditBrokerConnector = new TestTaxCreditBrokerConnector(paymentSummary, personalDetails, partnerDetails, Some(children), Some(exclusion))
 
-  val testAccess = new TestAccessCheck(authConnector)
-  val testCompositeAction = new TestAccountAccessControlWithAccept(testAccess)
   val testPersonalIncomeService = new TestPersonalIncomeService(taiConnector, authConnector, ntcConnector, taxCreditBrokerConnector, MicroserviceAuditConnector)
 
   val testSandboxPersonalIncomeService = SandboxPersonalIncomeService
-  val sandboxCompositeAction = AccountAccessControlCheckOff
   val testTaxCreditsSubmissionControl = new TestTaxCreditsSubmission(new TaxCreditsSubmissions(false, true))
   val testTaxCreditsSubmissionControlShuttered = new TestTaxCreditsSubmission(new TaxCreditsSubmissions(true, true))
 
@@ -256,29 +239,26 @@ trait Setup {
 trait Success extends Setup {
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
 trait AccessCheck extends Setup {
-  override val authConnector = new TestAuthConnector(None, Some(new FailToMatchTaxIdOnAuth("controlled explosion")))
-  override val testAccess = new TestAccessCheck(authConnector)
-  override val testCompositeAction = new TestAccountAccessControlWithAccept(testAccess)
-
+  override val authConnector = new TestAuthConnector(None)
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+    override def authConnector: AuthConnector = new TestAuthConnector(None)
   }
 }
-
 
 trait SuccessRenewalDisabled extends Setup {
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControlShuttered
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
@@ -290,8 +270,8 @@ trait Generate_503 extends Setup {
   override val testPersonalIncomeService = new TestPersonalIncomeService(taiConnector, authConnector, ntcConnector, taxCreditBrokerConnector, MicroserviceAuditConnector)
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
@@ -300,8 +280,8 @@ trait NotFound extends Setup {
   override val testPersonalIncomeService = new TestPersonalIncomeService(taiConnector, authConnector, ntcConnector, taxCreditBrokerConnector, MicroserviceAuditConnector)
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
@@ -311,51 +291,8 @@ trait GateKeeper extends Setup {
 
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
-  }
-}
-
-trait AuthWithLowCL extends Setup {
-  val routeToIv = true
-  val routeToTwoFactor = false
-
-  override val authConnector = new TestAuthConnector(None) {
-    lazy val exception = new AccountWithLowCL("Forbidden to access since low CL")
-
-    override def grantAccess(taxId:Option[Nino])(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Unit] = Future.failed(exception)
-  }
-
-  override val testAccess = new TestAccessCheck(authConnector)
-  override val taiConnector = new TestTaiConnector(Some(taxSummaryDetails))
-  override val testCompositeAction = new TestAccountAccessControlWithAccept(testAccess)
-  override val testPersonalIncomeService = new TestPersonalIncomeService(taiConnector, authConnector, ntcConnector, taxCreditBrokerConnector, MicroserviceAuditConnector)
-
-  val controller = new PersonalIncomeController {
-    override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
-    override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
-  }
-
-}
-
-trait AuthWithoutNino extends Setup {
-
-  override val authConnector =  new TestAuthConnector(None) {
-    lazy val exception = new NinoNotFoundOnAccount("NINO not found!")
-
-    override def grantAccess(taxId:Option[Nino])(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Unit] = Future.failed(exception)
-  }
-
-  override val testAccess = new TestAccessCheck(authConnector)
-  override val taiConnector = new TestTaiConnector(Some(taxSummaryDetails))
-  override val testCompositeAction = new TestAccountAccessControlWithAccept(testAccess)
-  override val testPersonalIncomeService = new TestPersonalIncomeService(taiConnector, authConnector, ntcConnector, taxCreditBrokerConnector, MicroserviceAuditConnector)
-
-  val controller = new PersonalIncomeController {
-    override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
-    override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
@@ -365,40 +302,36 @@ trait Ntc400Result extends Success {
 
   override val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = testCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
 trait SandboxSuccess extends Setup {
   val controller = new PersonalIncomeController {
     override val service: PersonalIncomeService = testSandboxPersonalIncomeService
-    override val accessControl: AccountAccessControlWithHeaderCheck = sandboxCompositeAction
     override val taxCreditsSubmissionControlConfig: TaxCreditsControl = testTaxCreditsSubmissionControl
+    override def authConnector: AuthConnector = AuthConnector
   }
 }
 
 trait ServiceStateSuccess extends Setup {
   val controller = new ServiceStateController {
     override val taxCreditsSubmissionControlConfig = testTaxCreditsSubmissionControl
-    override val accessControl = AccountAccessControlCheckOff
   }
 }
 
 trait ServiceStateSuccessShuttered extends Setup {
   val controller = new ServiceStateController {
     override val taxCreditsSubmissionControlConfig = new TestTaxCreditsSubmission(new TaxCreditsSubmissions(true, true))
-    override val accessControl = AccountAccessControlCheckOff
   }
 }
 trait ServiceStateNotInSubmissionPeriod extends Setup {
   val controller = new ServiceStateController {
     override val taxCreditsSubmissionControlConfig = new TestTaxCreditsSubmission(new TaxCreditsSubmissions(false, false))
-    override val accessControl = AccountAccessControlCheckOff
   }
 }
 
 trait SandboxServiceStateSuccess extends Setup {
   val controller = SandboxServiceStateController
 }
-

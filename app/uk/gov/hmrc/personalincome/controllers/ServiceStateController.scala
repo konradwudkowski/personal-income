@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 HM Revenue & Customs
+ * Copyright 2017 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 package uk.gov.hmrc.personalincome.controllers
 
 
+import play.api.mvc.Action
 import uk.gov.hmrc.api.controllers.HeaderValidator
-import uk.gov.hmrc.personalincome.controllers.action.{AccountAccessControlCheckOff, AccountAccessControlWithHeaderCheck}
 import uk.gov.hmrc.personalincome.domain.{SubmissionState, TaxCreditsControl, TaxCreditsSubmissionControl, TaxCreditsSubmissions}
 import uk.gov.hmrc.play.microservice.controller.BaseController
 import uk.gov.hmrc.time.DateTimeUtils
@@ -34,9 +34,9 @@ trait ServiceStateController extends BaseController with HeaderValidator with Er
   import scala.concurrent.ExecutionContext.Implicits.global
 
   val taxCreditsSubmissionControlConfig : TaxCreditsControl
-  val accessControl:AccountAccessControlWithHeaderCheck
+//  val accessControl:AccountAccessControlWithHeaderCheck
 
-  final def taxCreditsSubmissionState(journeyId: Option[String]=None) = accessControl.validateAccept(acceptHeaderValidationRules).async {
+  final def taxCreditsSubmissionState(journeyId: Option[String]=None) = Action.async  {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(
@@ -47,7 +47,7 @@ trait ServiceStateController extends BaseController with HeaderValidator with Er
         })
   }
 
-  final def taxCreditsSubmissionStateEnabled(journeyId: Option[String]=None) = accessControl.validateAccept(acceptHeaderValidationRules).async {
+  final def taxCreditsSubmissionStateEnabled(journeyId: Option[String]=None) = Action.async  {
     implicit request =>
       implicit val hc = HeaderCarrier.fromHeadersAndSession(request.headers, None)
       errorWrapper(
@@ -66,10 +66,10 @@ object SandboxServiceStateController extends ServiceStateController with DateTim
     override def toTaxCreditsSubmissions = new TaxCreditsSubmissions(false, true)
     override def toSubmissionState = new SubmissionState(true)
   }
-  override val accessControl = AccountAccessControlCheckOff
+//  override val accessControl = AccountAccessControlCheckOff
 }
 
 object LiveServiceStateController extends ServiceStateController {
   override val taxCreditsSubmissionControlConfig = TaxCreditsSubmissionControl
-  override val accessControl = AccountAccessControlWithHeaderCheck
+//  override val accessControl = AccountAccessControlWithHeaderCheck
 }

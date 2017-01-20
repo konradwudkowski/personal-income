@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 HM Revenue & Customs
+ * Copyright 2017 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,12 +42,6 @@ class TestPersonalIncomeSummarySpec extends UnitSpec with WithFakeApplication wi
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value, "year" -> "90")
     }
 
-    "return 401 when the nino in the request does not match the authority nino" in new AccessCheck {
-      val result = await(controller.getSummary(ninoIncorrect,90)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-    }
-
     "return the summary successfully when journeyId is supplied" in new Success {
 
       val result: Result = await(controller.getSummary(nino,90,Some(journeyId))(emptyRequestWithAcceptHeader))
@@ -57,7 +51,6 @@ class TestPersonalIncomeSummarySpec extends UnitSpec with WithFakeApplication wi
 
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value, "year" -> "90")
     }
-
 
     "return 404 when summary returned is None" in new NotFound {
 
@@ -76,25 +69,6 @@ class TestPersonalIncomeSummarySpec extends UnitSpec with WithFakeApplication wi
       contentAsJson(result) shouldBe Json.toJson(taxSummaryContainerGK)
 
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value, "year" -> "90")
-    }
-
-
-    "return unauthorized when authority record does not contain a NINO" in new AuthWithoutNino {
-      val result = await(controller.getSummary(nino,90)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe noNinoOnAccont
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
-    "return unauthorized when authority record has a low CL" in new AuthWithLowCL {
-      val result = await(controller.getSummary(nino,90)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe lowCl
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
     }
 
     "return status code 406 when the headers are invalid" in new Success {
@@ -145,12 +119,6 @@ class TestPersonalIncomeRenewalAuthenticateSpec extends UnitSpec with WithFakeAp
       contentAsJson(result) shouldBe Json.toJson(tcrAuthToken)
     }
 
-    "return 401 when the nino in the request does not match the authority nino" in new AccessCheck {
-      val result = await(controller.getRenewalAuthentication(ninoIncorrect, renewalReference)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-    }
-
     "process the authentication successfully when journeyId is supplied" in new Success {
       val result = await(controller.getRenewalAuthentication(nino, renewalReference, Some(journeyId))(emptyRequestWithAcceptHeader))
 
@@ -162,24 +130,6 @@ class TestPersonalIncomeRenewalAuthenticateSpec extends UnitSpec with WithFakeAp
       val  result = await(controller.getRenewalAuthentication(nino, renewalReferenceNines)(emptyRequestWithAcceptHeader))
 
       status(result) shouldBe 404
-    }
-
-    "return unauthorized when authority record does not contain a NINO" in new AuthWithoutNino {
-      val  result = await(controller.getRenewalAuthentication(nino, renewalReference)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe noNinoOnAccont
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
-    "return unauthorized when authority record has a low CL" in new AuthWithLowCL {
-      val  result = await(controller.getRenewalAuthentication(nino, renewalReference)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe lowCl
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
     }
 
     "return status code 406 when the headers are invalid" in new Success {
@@ -205,37 +155,12 @@ class TestPersonalIncomeRenewalClaimantDetailsSpec extends UnitSpec with WithFak
       contentAsJson(result) shouldBe Json.toJson(claimentDetails)
     }
 
-    "return 401 when the nino in the request does not match the authority nino" in new AccessCheck {
-      val result = await(controller.claimantDetails(ninoIncorrect)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
-
-      status(result) shouldBe 401
-    }
-
     "return the summary successfully when journeyId is supplied" in new Success {
       val result = await(controller.claimantDetails(nino, Some(journeyId))(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
 
       status(result) shouldBe 200
       contentAsJson(result) shouldBe Json.toJson(claimentDetails)
     }
-
-    "return unauthorized when authority record does not contain a NINO" in new AuthWithoutNino {
-      val result = await(controller.claimantDetails(nino)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe noNinoOnAccont
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
-    "return unauthorized when authority record has a low CL" in new AuthWithLowCL {
-      val result = await(controller.claimantDetails(nino)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe lowCl
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
 
     "return 403 response when the tcr auth header is not supplied in the request" in new Success {
       val result = await(controller.claimantDetails(nino)(emptyRequestWithAcceptHeader))
@@ -304,12 +229,6 @@ class TestPersonalIncomeRenewalSpec extends UnitSpec with WithFakeApplication wi
       status(result) shouldBe 200
     }
 
-    "return 401 when the nino in the request does not match the authority nino" in new AccessCheck {
-      val result = await(controller.submitRenewal(ninoIncorrect)(jsonRenewalRequestWithAuthHeader))
-
-      status(result) shouldBe 401
-    }
-
     "process the renewal successfully if renewals are disabled" in new SuccessRenewalDisabled {
       val result = await(controller.submitRenewal(nino)(jsonRenewalRequestWithAuthHeader))
 
@@ -341,24 +260,6 @@ class TestPersonalIncomeRenewalSpec extends UnitSpec with WithFakeApplication wi
       val result = await(controller.submitRenewal(nino)(renewalBadRequest))
 
       status(result) shouldBe 400
-    }
-
-    "Return 401 result when authority record does not contain a NINO" in new AuthWithoutNino {
-      val result = await(controller.submitRenewal(nino)(jsonRenewalRequestWithAuthHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe noNinoOnAccont
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
-    "return unauthorized when authority record has a low CL" in new AuthWithLowCL {
-      val result = await(controller.submitRenewal(nino)(jsonRenewalRequestWithAuthHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe lowCl
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
     }
 
     "return 406 result when the headers are invalid" in new Success {
@@ -405,12 +306,6 @@ class TestPersonalIncomeRenewalSummarySpec extends UnitSpec with WithFakeApplica
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value)
     }
 
-    "return 401 when the nino in the request does not match the authority nino" in new AccessCheck {
-      val result = await(controller.taxCreditsSummary(ninoIncorrect)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
-
-      status(result) shouldBe 401
-    }
-
     "return 429 HTTP status when retrieval of children returns 503" in new Generate_503 {
       val result = await(controller.taxCreditsSummary(nino)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
 
@@ -424,23 +319,6 @@ class TestPersonalIncomeRenewalSummarySpec extends UnitSpec with WithFakeApplica
       status(result) shouldBe 200
       contentAsJson(result) shouldBe Json.toJson(taxRenewalSummaryWithoutChildrenOver16)
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value)
-    }
-
-    "return unauthorized when authority record does not contain a NINO" in new AuthWithoutNino {
-      val result = await(controller.taxCreditsSummary(nino)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe noNinoOnAccont
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
-    "return unauthorized when authority record has a low CL" in new AuthWithLowCL {
-      val result = await(controller.taxCreditsSummary(nino)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe lowCl
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
     }
 
     "return status code 406 when the headers are invalid" in new Success {
@@ -482,12 +360,6 @@ class TestExclusionsServiceSpec extends UnitSpec with WithFakeApplication with S
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value)
     }
 
-    "return 401 when the nino in the request does not match the authority nino" in new AccessCheck {
-      val result = await(controller.getTaxCreditExclusion(ninoIncorrect)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
-
-      status(result) shouldBe 401
-    }
-
     "return 429 HTTP status when get tax credit exclusion returns 503" in new Generate_503 {
       val result = await(controller.getTaxCreditExclusion(nino)(emptyRequestWithAcceptHeaderAndAuthHeader(renewalReference)))
 
@@ -501,23 +373,6 @@ class TestExclusionsServiceSpec extends UnitSpec with WithFakeApplication with S
       status(result) shouldBe 200
       contentAsJson(result) shouldBe exclusionResult
       testPersonalIncomeService.saveDetails shouldBe Map("nino" -> nino.value)
-    }
-
-    "return unauthorized when authority record does not contain a NINO" in new AuthWithoutNino {
-      val result = await(controller.getTaxCreditExclusion(nino)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe noNinoOnAccont
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
-    }
-
-    "return unauthorized when authority record has a low Confidence Level" in new AuthWithLowCL {
-      val result = await(controller.getTaxCreditExclusion(nino)(emptyRequestWithAcceptHeader))
-
-      status(result) shouldBe 401
-      contentAsJson(result) shouldBe lowCl
-
-      testPersonalIncomeService.saveDetails shouldBe Map.empty
     }
 
     "return status code 406 when the headers are invalid" in new Success {
